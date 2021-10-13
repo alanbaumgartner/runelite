@@ -146,7 +146,7 @@ public class PartyPlugin extends Plugin
 	boolean developerMode;
 
 	@Getter
-	private final Map<UUID, PartyData> partyDataMap = Collections.synchronizedMap(new HashMap<>());
+	private final Map<String, PartyData> partyDataMap = Collections.synchronizedMap(new HashMap<>());
 
 	@Getter
 	private final List<PartyTilePingData> pendingTilePings = Collections.synchronizedList(new ArrayList<>());
@@ -187,6 +187,18 @@ public class PartyPlugin extends Plugin
 		wsClient.registerMessage(TilePing.class);
 		wsClient.registerMessage(LocationUpdate.class);
 		wsClient.registerMessage(CharacterNameUpdate.class);
+
+		if (config.shouldPersistParty())
+		{
+			try
+			{
+				UUID partyUuid = UUID.fromString(config.partyId().trim());
+				party.changeParty(partyUuid);
+			} catch (IllegalArgumentException ex)
+			{
+				System.out.println("Fuck");
+			}
+		}
 		// Delay sync so the eventbus can register prior to the sync response
 		SwingUtilities.invokeLater(this::requestSync);
 	}
@@ -259,13 +271,13 @@ public class PartyPlugin extends Plugin
 			{
 				if (config.includeSelf())
 				{
-					final PartyData partyData = getPartyData(localMember.getMemberId());
+					final PartyData partyData = getPartyData(localMember.getName());
 					assert partyData != null;
 					SwingUtilities.invokeLater(() -> panel.addMember(partyData));
 				}
 				else
 				{
-					SwingUtilities.invokeLater(() -> panel.removeMember(localMember.getMemberId()));
+					SwingUtilities.invokeLater(() -> panel.removeMember(localMember.getName()));
 				}
 			}
 
@@ -348,7 +360,7 @@ public class PartyPlugin extends Plugin
 	{
 		if (config.pings())
 		{
-			final PartyData partyData = getPartyData(event.getMemberId());
+			final PartyData partyData = getPartyData(event.getName());
 			final Color color = partyData != null ? partyData.getColor() : Color.RED;
 			pendingTilePings.add(new PartyTilePingData(event.getPoint(), color));
 		}
@@ -394,6 +406,7 @@ public class PartyPlugin extends Plugin
 
 		final LocationUpdate locationUpdate = new LocationUpdate(location);
 		locationUpdate.setMemberId(localMember.getMemberId());
+		locationUpdate.setName(localMember.getName());
 		wsClient.send(locationUpdate);
 	}
 
@@ -416,6 +429,7 @@ public class PartyPlugin extends Plugin
 			// Request sync
 			final UserSync userSync = new UserSync();
 			userSync.setMemberId(party.getLocalMember().getMemberId());
+			userSync.setName(party.getLocalMember().getName());
 			ws.send(userSync);
 		}
 	}
@@ -423,7 +437,7 @@ public class PartyPlugin extends Plugin
 	@Subscribe
 	public void onCharacterNameUpdate(final CharacterNameUpdate event)
 	{
-		final PartyData partyData = getPartyData(event.getMemberId());
+		final PartyData partyData = getPartyData(event.getName());
 
 		if (partyData == null)
 		{
@@ -434,13 +448,13 @@ public class PartyPlugin extends Plugin
 		name = Text.removeTags(Text.toJagexName(name));
 
 		partyData.setCharacterName(name);
-		SwingUtilities.invokeLater(() -> panel.updateMember(partyData.getMember().getMemberId()));
+		SwingUtilities.invokeLater(() -> panel.updateMember(partyData.getMember().getName()));
 	}
 
 	@Subscribe
 	public void onSkillUpdate(final SkillUpdate event)
 	{
-		final PartyData partyData = getPartyData(event.getMemberId());
+		final PartyData partyData = getPartyData(event.getName());
 
 		if (partyData == null)
 		{
@@ -458,13 +472,13 @@ public class PartyPlugin extends Plugin
 			partyData.setMaxPrayer(event.getMax());
 		}
 
-		SwingUtilities.invokeLater(() -> panel.updateMember(partyData.getMember().getMemberId()));
+		SwingUtilities.invokeLater(() -> panel.updateMember(partyData.getMember().getName()));
 	}
 
 	@Subscribe
 	public void onLocationUpdate(final LocationUpdate event)
 	{
-		final PartyData partyData = getPartyData(event.getMemberId());
+		final PartyData partyData = getPartyData(event.getName());
 
 		if (partyData == null)
 		{
@@ -477,7 +491,7 @@ public class PartyPlugin extends Plugin
 	@Subscribe
 	public void onUserJoin(final UserJoin event)
 	{
-		final PartyData partyData = getPartyData(event.getMemberId());
+		final PartyData partyData = getPartyData(event.getName());
 
 		if (partyData == null || !config.messages())
 		{
@@ -497,7 +511,7 @@ public class PartyPlugin extends Plugin
 
 		final PartyMember localMember = party.getLocalMember();
 
-		if (localMember != null && partyData.getMember().getMemberId().equals(localMember.getMemberId()))
+		if (localMember != null && partyData.getMember().getName().equals(localMember.getName()))
 		{
 			sendAlert = true;
 		}
@@ -527,6 +541,7 @@ public class PartyPlugin extends Plugin
 			{
 				final SkillUpdate update = new SkillUpdate(Skill.HITPOINTS, currentHealth, realHealth);
 				update.setMemberId(localMember.getMemberId());
+				update.setName(localMember.getName());
 				ws.send(update);
 			}
 
@@ -534,6 +549,7 @@ public class PartyPlugin extends Plugin
 			{
 				final SkillUpdate update = new SkillUpdate(Skill.PRAYER, currentPrayer, realPrayer);
 				update.setMemberId(localMember.getMemberId());
+				update.setName(localMember.getName());
 				ws.send(update);
 			}
 
@@ -541,6 +557,7 @@ public class PartyPlugin extends Plugin
 			{
 				final CharacterNameUpdate update = new CharacterNameUpdate(characterName);
 				update.setMemberId(localMember.getMemberId());
+				update.setName(localMember.getName());
 				ws.send(update);
 			}
 		}
@@ -550,32 +567,32 @@ public class PartyPlugin extends Plugin
 		lastCharacterName = characterName;
 	}
 
-	@Subscribe
-	public void onUserPart(final UserPart event)
-	{
-		final PartyData removed = partyDataMap.remove(event.getMemberId());
-
-		if (removed != null)
-		{
-			if (config.messages())
-			{
-				final String joinMessage = new ChatMessageBuilder()
-					.append(ChatColorType.HIGHLIGHT)
-					.append(removed.getMember().getName())
-					.append(" has left the party!")
-					.build();
-
-				chatMessageManager.queue(QueuedMessage.builder()
-					.type(ChatMessageType.FRIENDSCHATNOTIFICATION)
-					.runeLiteFormattedMessage(joinMessage)
-					.build());
-			}
-
-			worldMapManager.remove(removed.getWorldMapPoint());
-
-			SwingUtilities.invokeLater(() -> panel.removeMember(event.getMemberId()));
-		}
-	}
+//	@Subscribe
+//	public void onUserPart(final UserPart event)
+//	{
+//		final PartyData removed = partyDataMap.remove(event.getMemberId());
+//
+//		if (removed != null)
+//		{
+//			if (config.messages())
+//			{
+//				final String joinMessage = new ChatMessageBuilder()
+//					.append(ChatColorType.HIGHLIGHT)
+//					.append(removed.getMember().getName())
+//					.append(" has left the party!")
+//					.build();
+//
+//				chatMessageManager.queue(QueuedMessage.builder()
+//					.type(ChatMessageType.FRIENDSCHATNOTIFICATION)
+//					.runeLiteFormattedMessage(joinMessage)
+//					.build());
+//			}
+//
+//			worldMapManager.remove(removed.getWorldMapPoint());
+//
+//			SwingUtilities.invokeLater(() -> panel.removeMember(event.getName()));
+//		}
+//	}
 
 	@Subscribe
 	public void onPartyChanged(final PartyChanged event)
@@ -616,11 +633,11 @@ public class PartyPlugin extends Plugin
 	}
 
 	@Nullable
-	PartyData getPartyData(final UUID uuid)
+	PartyData getPartyData(final String name)
 	{
-		final PartyMember memberById = party.getMemberById(uuid);
+		final PartyMember member = party.getMemberByName(name);
 
-		if (memberById == null)
+		if (member == null)
 		{
 			// This happens when you are not in party but you still receive message.
 			// Can happen if you just left party and you received message before message went through
@@ -628,22 +645,22 @@ public class PartyPlugin extends Plugin
 			return null;
 		}
 
-		return partyDataMap.computeIfAbsent(uuid, (u) ->
+		return partyDataMap.computeIfAbsent(name, (u) ->
 		{
-			final WorldMapPoint worldMapPoint = new PartyWorldMapPoint(new WorldPoint(0, 0, 0), memberById);
-			worldMapPoint.setTooltip(memberById.getName());
+			final WorldMapPoint worldMapPoint = new PartyWorldMapPoint(new WorldPoint(0, 0, 0), member);
+			worldMapPoint.setTooltip(member.getName());
 
 			// When first joining a party, other members can join before getting a join for self
 			PartyMember partyMember = party.getLocalMember();
 
-			boolean isSelf = partyMember != null && u.equals(partyMember.getMemberId());
+			boolean isSelf = partyMember != null && u.equals(partyMember.getName());
 
 			if (!isSelf)
 			{
 				worldMapManager.add(worldMapPoint);
 			}
 
-			PartyData partyData = new PartyData(memberById, worldMapPoint, ColorUtil.fromObject(memberById.getName()));
+			PartyData partyData = new PartyData(member, worldMapPoint, ColorUtil.fromObject(member.getName()));
 			partyData.setShowOverlay(config.autoOverlay());
 
 			if (config.includeSelf() || !isSelf)

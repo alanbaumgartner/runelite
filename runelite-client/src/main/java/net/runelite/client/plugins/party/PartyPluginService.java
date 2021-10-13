@@ -36,5 +36,5 @@ public interface PartyPluginService
 	 * @return party data for member
 	 */
 	@Nullable
-	PartyData getPartyData(UUID memberId);
+	PartyData getPartyData(String memberId);
 }

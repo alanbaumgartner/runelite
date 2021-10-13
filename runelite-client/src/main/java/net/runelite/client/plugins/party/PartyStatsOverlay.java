@@ -69,7 +69,7 @@ public class PartyStatsOverlay extends OverlayPanel
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		final Map<UUID, PartyData> partyDataMap = plugin.getPartyDataMap();
+		final Map<String, PartyData> partyDataMap = plugin.getPartyDataMap();
 		if (partyDataMap.isEmpty())
 		{
 			return null;
@@ -81,7 +81,7 @@ public class PartyStatsOverlay extends OverlayPanel
 		{
 			partyDataMap.forEach((k, v) ->
 			{
-				boolean isSelf = party.getLocalMember() != null && party.getLocalMember().getMemberId().equals(k);
+				boolean isSelf = party.getLocalMember() != null && party.getLocalMember().getName().equals(k);
 
 				if (!v.isShowOverlay() || (!config.includeSelf() && isSelf))
 				{

@@ -158,6 +158,7 @@ public class PartyService
 		{
 			final UserSync userSync = new UserSync();
 			userSync.setMemberId(message.getMemberId());
+			userSync.setName(message.getName());
 			wsClient.send(userSync);
 		}
 	}

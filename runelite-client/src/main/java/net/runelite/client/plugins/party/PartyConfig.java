@@ -28,11 +28,20 @@ package net.runelite.client.plugins.party;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
 
 @ConfigGroup(PartyConfig.GROUP)
 public interface PartyConfig extends Config
 {
 	String GROUP = "party";
+
+	@ConfigSection(
+			name = "Persistence",
+			description = "Party persistence settings",
+			position = 1,
+			closedByDefault = true
+	)
+	String persistence = "Persistence";
 
 	@ConfigItem(
 		keyName = "pings",
@@ -98,5 +107,27 @@ public interface PartyConfig extends Config
 	default boolean includeSelf()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+			keyName = "shouldPersistParty",
+			name = "Persist Party",
+			description = "Persist party on startup.",
+			section = persistence,
+			position = 0
+	)
+	default boolean shouldPersistParty() {
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = "persistedPartyId",
+			name = "Party Id",
+			description = "Party Id to persist",
+			section = persistence,
+			position = 1
+	)
+	default String partyId() {
+		return "";
 	}
 }

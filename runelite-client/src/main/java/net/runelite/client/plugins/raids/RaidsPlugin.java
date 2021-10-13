@@ -494,6 +494,7 @@ public class RaidsPlugin extends Plugin
 		{
 			final PartyChatMessage message = new PartyChatMessage(layoutMessage);
 			message.setMemberId(localMember.getMemberId());
+			message.setName(localMember.getName());
 			ws.send(message);
 		}
 	}

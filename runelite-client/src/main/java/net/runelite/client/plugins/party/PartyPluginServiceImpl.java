@@ -42,7 +42,7 @@ public class PartyPluginServiceImpl implements PartyPluginService
 	}
 
 	@Override
-	public PartyData getPartyData(UUID memberId)
+	public PartyData getPartyData(String memberId)
 	{
 		return plugin.getPartyData(memberId);
 	}

@@ -206,6 +206,7 @@ public class DpsCounterPlugin extends Plugin
 			{
 				final DpsUpdate specialCounterUpdate = new DpsUpdate(hit);
 				specialCounterUpdate.setMemberId(localMember.getMemberId());
+				specialCounterUpdate.setName(localMember.getName());
 				wsClient.send(specialCounterUpdate);
 			}
 			// apply to total

@@ -25,18 +25,26 @@
 package net.runelite.client.plugins.party;
 
 import com.google.inject.Inject;
-import java.awt.BorderLayout;
+
+import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
-import javax.swing.JComponent;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
+import java.util.stream.Collectors;
+import javax.swing.*;
+import javax.swing.border.Border;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+
 import net.runelite.client.plugins.party.data.PartyData;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.DragAndDropReorderPane;
 import net.runelite.client.ui.components.PluginErrorPanel;
@@ -52,9 +60,11 @@ class PartyPanel extends PluginPanel
 	private final PartyConfig config;
 
 	private final Map<String, PartyRequestBox> requestBoxes = new HashMap<>();
-	private final Map<UUID, PartyMemberBox> memberBoxes = new HashMap<>();
+	private final Map<String, PartyMemberBox> memberBoxes = new HashMap<>();
 
 	private final JButton startButton = new JButton();
+	private final JButton joinPartyButton = new JButton();
+	private final JTextField partyIdField = new JTextField();
 
 	private final PluginErrorPanel noPartyPanel = new PluginErrorPanel();
 	private final PluginErrorPanel partyEmptyPanel = new PluginErrorPanel();
@@ -79,19 +89,40 @@ class PartyPanel extends PluginPanel
 
 		final JPanel topPanel = new JPanel();
 
-		topPanel.setBorder(new EmptyBorder(0, 0, 10, 0));
+		topPanel.setBorder(new EmptyBorder(0, 0, 4, 0));
 		topPanel.setLayout(new BorderLayout());
 
 		topPanel.add(startButton, BorderLayout.CENTER);
 
+		final JPanel joinPanel = new JPanel();
+
+		joinPanel.setBorder(new EmptyBorder(0, 0, 4, 0));
+		joinPanel.setLayout(new BorderLayout());
+
+		joinPanel.add(joinPartyButton, BorderLayout.CENTER);
+
+		final JPanel partyIdPanel = new JPanel();
+
+		partyIdPanel.setBorder(new EmptyBorder(0, 0, 4, 0));
+		partyIdPanel.setLayout(new BorderLayout());
+
+		partyIdPanel.add(partyIdField, BorderLayout.CENTER);
+		partyIdField.setEditable(false);
+
 		layoutPanel.add(topPanel);
+		layoutPanel.add(partyIdPanel);
+		layoutPanel.add(joinPanel);
 		layoutPanel.add(requestBoxPanel);
 		layoutPanel.add(memberBoxPanel);
 
 		startButton.setText(party.isInParty() ? BTN_LEAVE_TEXT : BTN_CREATE_TEXT);
 		startButton.setFocusable(false);
 
+		joinPartyButton.setText("Join Party");
+		joinPartyButton.setFocusable(false);
+
 		topPanel.add(startButton);
+		joinPanel.add(joinPartyButton);
 
 		startButton.addActionListener(e ->
 		{
@@ -115,6 +146,34 @@ class PartyPanel extends PluginPanel
 			}
 		});
 
+		joinPartyButton.addActionListener(e ->
+		{
+			if (!party.isInParty()) {
+				String s = (String) JOptionPane.showInputDialog(
+						joinPartyButton,
+						"Please enter the party id:",
+						"Party Id",
+						JOptionPane.PLAIN_MESSAGE,
+						null,
+						null,
+						"");
+
+				if (s == null)
+				{
+					return;
+				}
+
+				try
+				{
+					party.changeParty(UUID.fromString(s));
+				} catch (IllegalArgumentException ex)
+				{
+					JOptionPane.showMessageDialog(joinPartyButton, "You have entered an invalid party id.", "Invalid Party Id",
+							JOptionPane.ERROR_MESSAGE);
+				}
+			}
+		});
+
 		noPartyPanel.setContent("Not in a party", "Create a party to begin.");
 		partyEmptyPanel.setContent("Party created", "You can now invite friends!");
 
@@ -127,6 +186,9 @@ class PartyPanel extends PluginPanel
 		remove(partyEmptyPanel);
 
 		startButton.setText(party.isInParty() ? BTN_LEAVE_TEXT : BTN_CREATE_TEXT);
+		joinPartyButton.setVisible(!party.isInParty());
+		partyIdField.setText(String.valueOf(party.getPartyId()));
+		partyIdField.setVisible(party.isInParty());
 
 		if (!party.isInParty())
 		{
@@ -140,10 +202,10 @@ class PartyPanel extends PluginPanel
 
 	void addMember(PartyData partyData)
 	{
-		if (!memberBoxes.containsKey(partyData.getMember().getMemberId()))
+		if (!memberBoxes.containsKey(partyData.getMember().getName()))
 		{
 			PartyMemberBox partyMemberBox = new PartyMemberBox(config, memberBoxPanel, partyData);
-			memberBoxes.put(partyData.getMember().getMemberId(), partyMemberBox);
+			memberBoxes.put(partyData.getMember().getName(), partyMemberBox);
 			memberBoxPanel.add(partyMemberBox);
 			memberBoxPanel.revalidate();
 		}
@@ -158,9 +220,9 @@ class PartyPanel extends PluginPanel
 		updateParty();
 	}
 
-	void removeMember(UUID memberId)
+	void removeMember(String name)
 	{
-		final PartyMemberBox memberBox = memberBoxes.remove(memberId);
+		final PartyMemberBox memberBox = memberBoxes.remove(name);
 
 		if (memberBox != null)
 		{
@@ -171,14 +233,20 @@ class PartyPanel extends PluginPanel
 		updateParty();
 	}
 
-	void updateMember(UUID userId)
+	void updateMember(String name)
 	{
-		final PartyMemberBox memberBox = memberBoxes.get(userId);
+		final PartyMemberBox memberBox = memberBoxes.get(name);
 
 		if (memberBox != null)
 		{
 			memberBox.update();
 		}
+	}
+
+	void updateMember(UUID memberId)
+	{
+		final List<PartyMemberBox> memberBoxList = memberBoxes.values().stream().filter(partyMemberBox -> partyMemberBox.getMemberPartyData().getMember().getMemberId().equals(memberId)).collect(Collectors.toList());
+		memberBoxList.forEach(PartyMemberBox::update);
 	}
 
 	void updateAll()

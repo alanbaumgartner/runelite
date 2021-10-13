@@ -9,4 +9,5 @@ import lombok.Setter;
 public abstract class PartyMemberMessage extends PartyMessage
 {
 	private UUID memberId;
+	private String name;
 }
